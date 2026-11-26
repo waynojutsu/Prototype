@@ -1,0 +1,661 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUniversity(u) {
+      return u in ['UB', 'BIUST', 'BAC', 'BOTHO', 'BUAN', 'OTHER'];
+    }
+
+    function isValidAcBwEmail(email) {
+      return email is string &&
+             email.size() >= 8 &&
+             email.size() <= 120 &&
+             email.matches('^[A-Za-z0-9._%+\\-]+@([A-Za-z0-9\\-]+\\.)+ac\\.bw$');
+    }
+
+    function isValidAcBwDomain(domain) {
+      return domain is string &&
+             domain.size() >= 7 &&
+             domain.size() <= 80 &&
+             domain.matches('^([A-Za-z0-9\\-]+\\.)+ac\\.bw$');
+    }
+
+    function isValidStringList(list, maxLen) {
+      return list is list &&
+             list.size() <= maxLen &&
+             (list.size() == 0 || list[0] is string);
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+
+    function isValidUserPrivate(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.googleEmail is string && data.googleEmail.size() >= 3 && data.googleEmail.size() <= 120 &&
+             isValidAcBwEmail(data.studentEmail) &&
+             isValidAcBwDomain(data.verifiedDomain) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStudentProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 50 &&
+             isValidUniversity(data.university) &&
+             data.faculty is string && data.faculty.size() >= 2 && data.faculty.size() <= 60 &&
+             data.yearOfStudy is int && data.yearOfStudy >= 1 && data.yearOfStudy <= 6 &&
+             data.bio is string && data.bio.size() <= 200 &&
+             isValidAcBwDomain(data.verifiedDomain) &&
+             data.acBwVerified is bool && data.acBwVerified == true &&
+             data.discoverable is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCampusPost(data) {
+      return data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 50 &&
+             isValidUniversity(data.authorUniversity) &&
+             data.category in ['ANNOUNCEMENT', 'QUESTION', 'CAMPUS_LIFE', 'OPPORTUNITY'] &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 1000 &&
+             data.visibility == 'public' &&
+             isValidStringList(data.likedByUids, 200) &&
+             data.commentCount is int && data.commentCount >= 0 && data.commentCount <= 10000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidPostComment(data) {
+      return data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 &&
+             data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 50 &&
+             isValidUniversity(data.authorUniversity) &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 500 &&
+             data.visibility == 'public' &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidStudyGroup(data) {
+      return data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 50 &&
+             isValidUniversity(data.creatorUniversity) &&
+             isValidUniversity(data.university) &&
+             data.courseCode is string && data.courseCode.size() >= 2 && data.courseCode.size() <= 16 &&
+             data.studyTopic is string && data.studyTopic.size() >= 3 && data.studyTopic.size() <= 100 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 600 &&
+             data.meetingSchedule is string && data.meetingSchedule.size() <= 100 &&
+             data.maxMembers is int && data.maxMembers >= 2 && data.maxMembers <= 30 &&
+             isValidStringList(data.memberUids, 30) &&
+             data.memberUids.size() <= data.maxMembers &&
+             isValidStringList(data.pendingRequestUids, 50) &&
+             data.visibility == 'public' &&
+             data.groupStatus in ['open', 'full', 'closed'] &&
+             data.linkedChannelId is string && data.linkedChannelId.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStudyJoinRequest(data) {
+      return data.groupId is string && data.groupId.size() >= 1 && data.groupId.size() <= 128 &&
+             data.groupCreatorId is string && data.groupCreatorId.size() >= 1 && data.groupCreatorId.size() <= 128 &&
+             data.requesterId is string && data.requesterId.size() >= 1 && data.requesterId.size() <= 128 &&
+             data.requesterName is string && data.requesterName.size() >= 1 && data.requesterName.size() <= 50 &&
+             isValidUniversity(data.requesterUniversity) &&
+             data.requesterFaculty is string && data.requesterFaculty.size() >= 1 && data.requesterFaculty.size() <= 60 &&
+             data.note is string && data.note.size() <= 200 &&
+             data.requestStatus in ['pending', 'accepted', 'declined'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidChatChannel(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+             data.description is string && data.description.size() <= 240 &&
+             (data.university == 'ALL' || isValidUniversity(data.university)) &&
+             data.courseCode is string && data.courseCode.size() <= 16 &&
+             data.channelType in ['CAMPUS_LOUNGE', 'STUDY_GROUP', 'DIRECT'] &&
+             data.visibility in ['public', 'direct'] &&
+             data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128 &&
+             isValidStringList(data.memberUids, 50) &&
+             data.lastMessageText is string && data.lastMessageText.size() <= 200 &&
+             data.lastMessageSender is string && data.lastMessageSender.size() <= 60 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.channelId is string && data.channelId.size() >= 1 && data.channelId.size() <= 128 &&
+             data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 50 &&
+             isValidUniversity(data.senderUniversity) &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 1000 &&
+             data.visibility in ['public', 'direct'] &&
+             isValidStringList(data.memberUids, 50) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidMarketListing(data) {
+      return data.sellerId is string && data.sellerId.size() >= 1 && data.sellerId.size() <= 128 &&
+             data.sellerName is string && data.sellerName.size() >= 1 && data.sellerName.size() <= 50 &&
+             isValidUniversity(data.sellerUniversity) &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 600 &&
+             data.category in ['TEXTBOOKS', 'TECH', 'HOUSING', 'SERVICES'] &&
+             data.priceBwp is int && data.priceBwp >= 0 && data.priceBwp <= 500000 &&
+             data.condition in ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR'] &&
+             data.pickupSpot is string && data.pickupSpot.size() >= 1 && data.pickupSpot.size() <= 100 &&
+             data.listingStatus in ['available', 'sold'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCampusEvent(data) {
+      return data.organizerId is string && data.organizerId.size() >= 1 && data.organizerId.size() <= 128 &&
+             data.organizerName is string && data.organizerName.size() >= 1 && data.organizerName.size() <= 50 &&
+             isValidUniversity(data.university) &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 600 &&
+             data.venue is string && data.venue.size() >= 2 && data.venue.size() <= 100 &&
+             data.eventDateLabel is string && data.eventDateLabel.size() >= 2 && data.eventDateLabel.size() <= 50 &&
+             (!('eventDateIso' in data) || (data.eventDateIso is string && data.eventDateIso.size() <= 20)) &&
+             data.category in ['ACADEMIC', 'CLUBS', 'SPORTS', 'SOCIAL'] &&
+             data.visibility == 'public' &&
+             isValidStringList(data.attendeeUids, 500) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserPresence(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.status in ['online', 'away', 'offline'] &&
+             data.visibility == 'public' &&
+             data.lastActiveAt is timestamp && data.lastActiveAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFcmToken(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.token is string && data.token.size() >= 10 && data.token.size() <= 512 &&
+             data.platform == 'android' &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserNotification(data) {
+      return data.recipientId is string && data.recipientId.size() >= 1 && data.recipientId.size() <= 128 &&
+             data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 50 &&
+             isValidUniversity(data.senderUniversity) &&
+             data.notifType in ['CHAT_MESSAGE', 'POST_REPLY'] &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 240 &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.read is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidReportReason(reason) {
+      return reason in ['SPAM', 'HARASSMENT', 'HATE_SPEECH', 'MISINFORMATION', 'INAPPROPRIATE_CONTENT', 'ACADEMIC_DISHONESTY'];
+    }
+
+    function isValidPostReport(data) {
+      return data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 &&
+             data.postAuthorId is string && data.postAuthorId.size() >= 1 && data.postAuthorId.size() <= 128 &&
+             data.postAuthorName is string && data.postAuthorName.size() >= 1 && data.postAuthorName.size() <= 50 &&
+             data.postTitle is string && data.postTitle.size() <= 120 &&
+             data.postExcerpt is string && data.postExcerpt.size() <= 240 &&
+             data.reporterId is string && data.reporterId.size() >= 1 && data.reporterId.size() <= 128 &&
+             data.reporterName is string && data.reporterName.size() >= 1 && data.reporterName.size() <= 50 &&
+             isValidUniversity(data.reporterUniversity) &&
+             isValidReportReason(data.reason) &&
+             data.details is string && data.details.size() <= 400 &&
+             data.status in ['pending', 'reviewed', 'dismissed'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAdminNotification(data) {
+      return data.reportId is string && data.reportId.size() >= 1 && data.reportId.size() <= 128 &&
+             data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 &&
+             data.postAuthorId is string && data.postAuthorId.size() >= 1 && data.postAuthorId.size() <= 128 &&
+             data.postTitle is string && data.postTitle.size() <= 120 &&
+             data.reporterId is string && data.reporterId.size() >= 1 && data.reporterId.size() <= 128 &&
+             data.reporterName is string && data.reporterName.size() >= 1 && data.reporterName.size() <= 50 &&
+             isValidUniversity(data.reporterUniversity) &&
+             isValidReportReason(data.reason) &&
+             data.details is string && data.details.size() <= 400 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 300 &&
+             data.read is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 1. Private User PII & .ac.bw Email Verification
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'googleEmail', 'studentEmail', 'verifiedDomain', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'googleEmail', 'studentEmail', 'verifiedDomain', 'createdAt', 'updatedAt']) &&
+                       isValidUserPrivate(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserPrivate(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().googleEmail == existing().googleEmail &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['studentEmail', 'verifiedDomain', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      match /fcmTokens/{tokenId} {
+        allow get, list: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+        allow create, update: if isSignedIn() &&
+                                 isValidId(userId) &&
+                                 isValidId(tokenId) &&
+                                 request.auth.uid == userId &&
+                                 incoming().userId == request.auth.uid &&
+                                 incoming().keys().hasAll(['userId', 'token', 'platform', 'updatedAt']) &&
+                                 incoming().keys().hasOnly(['userId', 'token', 'platform', 'updatedAt']) &&
+                                 isValidFcmToken(incoming());
+        allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      }
+
+      match /notifications/{notifId} {
+        allow get, list: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(notifId) &&
+                         incoming().recipientId == userId &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().senderId != userId &&
+                         incoming().read == false &&
+                         incoming().keys().hasAll(['recipientId', 'senderId', 'senderName', 'senderUniversity', 'notifType', 'title', 'body', 'targetId', 'read', 'createdAt']) &&
+                         incoming().keys().hasOnly(['recipientId', 'senderId', 'senderName', 'senderUniversity', 'notifType', 'title', 'body', 'targetId', 'read', 'createdAt']) &&
+                         isValidUserNotification(incoming());
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(notifId) &&
+                         request.auth.uid == userId &&
+                         incoming().recipientId == existing().recipientId &&
+                         incoming().senderId == existing().senderId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['read']) &&
+                         incoming().read is bool;
+        allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      }
+    }
+
+    // 2. Public Student Profiles (Atomic check guarantees valid .ac.bw UserPrivate exists)
+    match /studentProfiles/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || (resource != null && (existing().discoverable == true || existing().userId == request.auth.uid)));
+      allow list: if isSignedIn() && (resource.data.discoverable == true || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'university', 'faculty', 'yearOfStudy', 'bio', 'verifiedDomain', 'acBwVerified', 'discoverable', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'university', 'faculty', 'yearOfStudy', 'bio', 'verifiedDomain', 'acBwVerified', 'discoverable', 'createdAt', 'updatedAt']) &&
+                       isValidStudentProfile(incoming()) &&
+                       existsAfter(/databases/$(database)/documents/users/$(userId)) &&
+                       getAfter(/databases/$(database)/documents/users/$(userId)).data.verifiedDomain == incoming().verifiedDomain;
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidStudentProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().verifiedDomain == existing().verifiedDomain &&
+                       incoming().acBwVerified == existing().acBwVerified &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'university', 'faculty', 'yearOfStudy', 'bio', 'discoverable', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // 3. Campus Feed Posts & Comments
+    match /posts/{postId} {
+      allow get: if isSignedIn() && isValidId(postId) && (existing().visibility == 'public' || existing().authorId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.visibility == 'public' || resource.data.authorId == request.auth.uid);
+      allow create: if isSignedIn() &&
+                       isValidId(postId) &&
+                       incoming().authorId == request.auth.uid &&
+                       incoming().keys().hasAll(['authorId', 'authorName', 'authorUniversity', 'category', 'title', 'body', 'visibility', 'likedByUids', 'commentCount', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['authorId', 'authorName', 'authorUniversity', 'category', 'title', 'body', 'visibility', 'likedByUids', 'commentCount', 'createdAt', 'updatedAt']) &&
+                       incoming().likedByUids.size() == 0 &&
+                       incoming().commentCount == 0 &&
+                       isValidCampusPost(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(postId) &&
+                       isValidCampusPost(incoming()) &&
+                       incoming().authorId == existing().authorId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action: Author edits post
+                         (existing().authorId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['category', 'title', 'body', 'updatedAt'])) ||
+                         // Action: Student toggles own like
+                         (existing().visibility == 'public' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['likedByUids', 'updatedAt']) &&
+                          ((incoming().likedByUids.size() == existing().likedByUids.size() + 1 &&
+                            request.auth.uid in incoming().likedByUids &&
+                            !(request.auth.uid in existing().likedByUids)) ||
+                           (incoming().likedByUids.size() == existing().likedByUids.size() - 1 &&
+                            !(request.auth.uid in incoming().likedByUids) &&
+                            request.auth.uid in existing().likedByUids))) ||
+                         // Action: Atomic comment count increment
+                         (existing().visibility == 'public' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
+                          incoming().commentCount == existing().commentCount + 1)
+                       );
+      allow delete: if isSignedIn() && isValidId(postId) && (existing().authorId == request.auth.uid || isAdmin());
+
+      match /comments/{commentId} {
+        allow get: if isSignedIn() && isValidId(postId) && isValidId(commentId) && (existing().visibility == 'public' || existing().authorId == request.auth.uid);
+        allow list: if isSignedIn() && (resource.data.visibility == 'public' || resource.data.authorId == request.auth.uid);
+        allow create: if isSignedIn() &&
+                         isValidId(postId) &&
+                         isValidId(commentId) &&
+                         incoming().postId == postId &&
+                         incoming().authorId == request.auth.uid &&
+                         incoming().keys().hasAll(['postId', 'authorId', 'authorName', 'authorUniversity', 'body', 'visibility', 'createdAt']) &&
+                         incoming().keys().hasOnly(['postId', 'authorId', 'authorName', 'authorUniversity', 'body', 'visibility', 'createdAt']) &&
+                         isValidPostComment(incoming()) &&
+                         exists(/databases/$(database)/documents/posts/$(postId));
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(postId) && isValidId(commentId) && existing().authorId == request.auth.uid;
+      }
+    }
+
+    // 4. Study Groups & Join Requests
+    match /studyGroups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId) && (existing().visibility == 'public' || existing().creatorId == request.auth.uid || request.auth.uid in existing().memberUids);
+      allow list: if isSignedIn() && (resource.data.visibility == 'public' || resource.data.creatorId == request.auth.uid || request.auth.uid in resource.data.memberUids);
+      allow create: if isSignedIn() &&
+                       isValidId(groupId) &&
+                       incoming().creatorId == request.auth.uid &&
+                       incoming().keys().hasAll(['creatorId', 'creatorName', 'creatorUniversity', 'university', 'courseCode', 'studyTopic', 'description', 'meetingSchedule', 'maxMembers', 'memberUids', 'pendingRequestUids', 'visibility', 'groupStatus', 'linkedChannelId', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['creatorId', 'creatorName', 'creatorUniversity', 'university', 'courseCode', 'studyTopic', 'description', 'meetingSchedule', 'maxMembers', 'memberUids', 'pendingRequestUids', 'visibility', 'groupStatus', 'linkedChannelId', 'createdAt', 'updatedAt']) &&
+                       incoming().memberUids.size() == 1 &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().pendingRequestUids.size() == 0 &&
+                       incoming().groupStatus == 'open' &&
+                       isValidStudyGroup(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(groupId) &&
+                       isValidStudyGroup(incoming()) &&
+                       incoming().creatorId == existing().creatorId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action: Creator edits study group or approves/declines join requests
+                         (existing().creatorId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['university', 'courseCode', 'studyTopic', 'description', 'meetingSchedule', 'maxMembers', 'memberUids', 'pendingRequestUids', 'groupStatus', 'updatedAt'])) ||
+                         // Action: Student requests to join (atomic with joinRequests/{uid} doc)
+                         (existing().visibility == 'public' &&
+                          existing().groupStatus == 'open' &&
+                          !(request.auth.uid in existing().memberUids) &&
+                          !(request.auth.uid in existing().pendingRequestUids) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['pendingRequestUids', 'updatedAt']) &&
+                          incoming().pendingRequestUids.size() == existing().pendingRequestUids.size() + 1 &&
+                          request.auth.uid in incoming().pendingRequestUids &&
+                          existsAfter(/databases/$(database)/documents/studyGroups/$(groupId)/joinRequests/$(request.auth.uid))) ||
+                         // Action: Student withdraws pending request
+                         (request.auth.uid in existing().pendingRequestUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['pendingRequestUids', 'updatedAt']) &&
+                          incoming().pendingRequestUids.size() == existing().pendingRequestUids.size() - 1 &&
+                          !(request.auth.uid in incoming().pendingRequestUids)) ||
+                         // Action: Member leaves study group
+                         (existing().creatorId != request.auth.uid &&
+                          request.auth.uid in existing().memberUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'groupStatus', 'updatedAt']) &&
+                          incoming().memberUids.size() == existing().memberUids.size() - 1 &&
+                          !(request.auth.uid in incoming().memberUids))
+                       );
+      allow delete: if isSignedIn() && isValidId(groupId) && existing().creatorId == request.auth.uid;
+
+      match /joinRequests/{requesterUid} {
+        allow get: if isSignedIn() && isValidId(groupId) && isValidId(requesterUid) && (existing().requesterId == request.auth.uid || existing().groupCreatorId == request.auth.uid);
+        allow list: if isSignedIn() && (resource.data.groupCreatorId == request.auth.uid || resource.data.requesterId == request.auth.uid);
+        allow create: if isSignedIn() &&
+                         isValidId(groupId) &&
+                         isValidId(requesterUid) &&
+                         request.auth.uid == requesterUid &&
+                         incoming().groupId == groupId &&
+                         incoming().requesterId == request.auth.uid &&
+                         incoming().requestStatus == 'pending' &&
+                         incoming().keys().hasAll(['groupId', 'groupCreatorId', 'requesterId', 'requesterName', 'requesterUniversity', 'requesterFaculty', 'note', 'requestStatus', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['groupId', 'groupCreatorId', 'requesterId', 'requesterName', 'requesterUniversity', 'requesterFaculty', 'note', 'requestStatus', 'createdAt', 'updatedAt']) &&
+                         isValidStudyJoinRequest(incoming()) &&
+                         exists(/databases/$(database)/documents/studyGroups/$(groupId)) &&
+                         get(/databases/$(database)/documents/studyGroups/$(groupId)).data.creatorId == incoming().groupCreatorId;
+        allow update: if isSignedIn() &&
+                         isValidId(groupId) &&
+                         isValidId(requesterUid) &&
+                         isValidStudyJoinRequest(incoming()) &&
+                         incoming().groupId == existing().groupId &&
+                         incoming().requesterId == existing().requesterId &&
+                         incoming().groupCreatorId == existing().groupCreatorId &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().groupCreatorId == request.auth.uid &&
+                         existing().requestStatus == 'pending' &&
+                         incoming().requestStatus in ['accepted', 'declined'] &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['requestStatus', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(groupId) && isValidId(requesterUid) && (existing().requesterId == request.auth.uid || existing().groupCreatorId == request.auth.uid);
+      }
+    }
+
+    // 5. Chat Channels & Messages
+    match /channels/{channelId} {
+      allow get: if isSignedIn() && isValidId(channelId) && resource != null && (existing().visibility == 'public' || request.auth.uid in existing().memberUids);
+      allow list: if isSignedIn() && (resource.data.visibility == 'public' || request.auth.uid in resource.data.memberUids);
+      allow create: if isSignedIn() &&
+                       isValidId(channelId) &&
+                       incoming().creatorId == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll(['name', 'description', 'university', 'courseCode', 'channelType', 'visibility', 'creatorId', 'memberUids', 'lastMessageText', 'lastMessageSender', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'description', 'university', 'courseCode', 'channelType', 'visibility', 'creatorId', 'memberUids', 'lastMessageText', 'lastMessageSender', 'createdAt', 'updatedAt']) &&
+                       isValidChatChannel(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(channelId) &&
+                       isValidChatChannel(incoming()) &&
+                       incoming().creatorId == existing().creatorId &&
+                       incoming().channelType == existing().channelType &&
+                       incoming().visibility == existing().visibility &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action: Update last message preview on message send
+                         ((existing().visibility == 'public' || request.auth.uid in existing().memberUids) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['lastMessageText', 'lastMessageSender', 'updatedAt'])) ||
+                         // Action: Creator edits channel metadata or adds approved members
+                         (existing().creatorId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'memberUids', 'updatedAt'])) ||
+                         // Action: Non-creator member leaves channel
+                         (existing().creatorId != request.auth.uid &&
+                          request.auth.uid in existing().memberUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+                          !(request.auth.uid in incoming().memberUids) &&
+                          incoming().memberUids.size() == existing().memberUids.size() - 1)
+                       );
+      allow delete: if isSignedIn() && isValidId(channelId) && existing().creatorId == request.auth.uid;
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(channelId) && isValidId(messageId) && (existing().visibility == 'public' || request.auth.uid in existing().memberUids);
+        allow list: if isSignedIn() && (resource.data.visibility == 'public' || request.auth.uid in resource.data.memberUids);
+        allow create: if isSignedIn() &&
+                         isValidId(channelId) &&
+                         isValidId(messageId) &&
+                         incoming().channelId == channelId &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().keys().hasAll(['channelId', 'senderId', 'senderName', 'senderUniversity', 'text', 'visibility', 'memberUids', 'createdAt']) &&
+                         incoming().keys().hasOnly(['channelId', 'senderId', 'senderName', 'senderUniversity', 'text', 'visibility', 'memberUids', 'createdAt']) &&
+                         isValidChatMessage(incoming()) &&
+                         exists(/databases/$(database)/documents/channels/$(channelId)) &&
+                         get(/databases/$(database)/documents/channels/$(channelId)).data.visibility == incoming().visibility &&
+                         (incoming().visibility == 'public' ||
+                          (request.auth.uid in get(/databases/$(database)/documents/channels/$(channelId)).data.memberUids &&
+                           request.auth.uid in incoming().memberUids));
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(channelId) && isValidId(messageId) && existing().senderId == request.auth.uid;
+      }
+    }
+
+    // 6. Student Marketplace Listings
+    match /listings/{listingId} {
+      allow get: if isSignedIn() && isValidId(listingId) && (existing().listingStatus == 'available' || existing().sellerId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.listingStatus == 'available' || resource.data.sellerId == request.auth.uid);
+      allow create: if isSignedIn() &&
+                       isValidId(listingId) &&
+                       incoming().sellerId == request.auth.uid &&
+                       incoming().listingStatus == 'available' &&
+                       incoming().keys().hasAll(['sellerId', 'sellerName', 'sellerUniversity', 'title', 'description', 'category', 'priceBwp', 'condition', 'pickupSpot', 'listingStatus', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['sellerId', 'sellerName', 'sellerUniversity', 'title', 'description', 'category', 'priceBwp', 'condition', 'pickupSpot', 'listingStatus', 'createdAt', 'updatedAt']) &&
+                       isValidMarketListing(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(listingId) &&
+                       existing().sellerId == request.auth.uid &&
+                       existing().listingStatus != 'sold' &&
+                       isValidMarketListing(incoming()) &&
+                       incoming().sellerId == existing().sellerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'priceBwp', 'condition', 'pickupSpot', 'listingStatus', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(listingId) && existing().sellerId == request.auth.uid;
+    }
+
+    // 7. Campus Events & Clubs Calendar
+    match /events/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId) && (existing().visibility == 'public' || existing().organizerId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.visibility == 'public' || resource.data.organizerId == request.auth.uid);
+      allow create: if isSignedIn() &&
+                       isValidId(eventId) &&
+                       incoming().organizerId == request.auth.uid &&
+                       incoming().keys().hasAll(['organizerId', 'organizerName', 'university', 'title', 'description', 'venue', 'eventDateLabel', 'category', 'visibility', 'attendeeUids', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['organizerId', 'organizerName', 'university', 'title', 'description', 'venue', 'eventDateLabel', 'eventDateIso', 'category', 'visibility', 'attendeeUids', 'createdAt', 'updatedAt']) &&
+                       incoming().attendeeUids.size() == 1 &&
+                       request.auth.uid in incoming().attendeeUids &&
+                       isValidCampusEvent(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(eventId) &&
+                       isValidCampusEvent(incoming()) &&
+                       incoming().organizerId == existing().organizerId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action: Organizer edits event details
+                         (existing().organizerId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['university', 'title', 'description', 'venue', 'eventDateLabel', 'eventDateIso', 'category', 'updatedAt'])) ||
+                         // Action: Student toggles own RSVP
+                         (existing().visibility == 'public' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['attendeeUids', 'updatedAt']) &&
+                          ((incoming().attendeeUids.size() == existing().attendeeUids.size() + 1 &&
+                            request.auth.uid in incoming().attendeeUids &&
+                            !(request.auth.uid in existing().attendeeUids)) ||
+                           (incoming().attendeeUids.size() == existing().attendeeUids.size() - 1 &&
+                            !(request.auth.uid in incoming().attendeeUids) &&
+                            request.auth.uid in existing().attendeeUids)))
+                       );
+      allow delete: if isSignedIn() && isValidId(eventId) && existing().organizerId == request.auth.uid;
+    }
+
+    // 8. Real-Time Chat User Presence (online, away, offline)
+    match /userPresence/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn() && resource.data.visibility == 'public';
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'status', 'visibility', 'lastActiveAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'status', 'visibility', 'lastActiveAt', 'updatedAt']) &&
+                       isValidUserPresence(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserPresence(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'lastActiveAt', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // 9. Server-Managed Administrator Roles (No client writes)
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // 10. Post Moderation Reports
+    match /postReports/{reportId} {
+      allow get: if isSignedIn() && isValidId(reportId) && (isAdmin() || (resource != null && existing().reporterId == request.auth.uid));
+      allow list: if isSignedIn() && (isAdmin() || resource.data.reporterId == request.auth.uid);
+      allow create: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       incoming().reporterId == request.auth.uid &&
+                       incoming().postAuthorId != request.auth.uid &&
+                       incoming().status == 'pending' &&
+                       incoming().keys().hasAll(['postId', 'postAuthorId', 'postAuthorName', 'postTitle', 'postExcerpt', 'reporterId', 'reporterName', 'reporterUniversity', 'reason', 'details', 'status', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['postId', 'postAuthorId', 'postAuthorName', 'postTitle', 'postExcerpt', 'reporterId', 'reporterName', 'reporterUniversity', 'reason', 'details', 'status', 'createdAt', 'updatedAt']) &&
+                       isValidPostReport(incoming()) &&
+                       exists(/databases/$(database)/documents/posts/$(incoming().postId)) &&
+                       get(/databases/$(database)/documents/posts/$(incoming().postId)).data.authorId == incoming().postAuthorId;
+      allow update: if isAdmin() &&
+                       isValidId(reportId) &&
+                       isValidPostReport(incoming()) &&
+                       incoming().postId == existing().postId &&
+                       incoming().postAuthorId == existing().postAuthorId &&
+                       incoming().reporterId == existing().reporterId &&
+                       incoming().reason == existing().reason &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(reportId) && (isAdmin() || existing().reporterId == request.auth.uid);
+    }
+
+    // 11. Administrator Moderation Notifications
+    match /adminNotifications/{notifId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn() &&
+                       isValidId(notifId) &&
+                       incoming().reporterId == request.auth.uid &&
+                       incoming().read == false &&
+                       incoming().keys().hasAll(['reportId', 'postId', 'postAuthorId', 'postTitle', 'reporterId', 'reporterName', 'reporterUniversity', 'reason', 'details', 'title', 'body', 'read', 'createdAt']) &&
+                       incoming().keys().hasOnly(['reportId', 'postId', 'postAuthorId', 'postTitle', 'reporterId', 'reporterName', 'reporterUniversity', 'reason', 'details', 'title', 'body', 'read', 'createdAt']) &&
+                       isValidAdminNotification(incoming()) &&
+                       existsAfter(/databases/$(database)/documents/postReports/$(incoming().reportId)) &&
+                       getAfter(/databases/$(database)/documents/postReports/$(incoming().reportId)).data.reporterId == request.auth.uid &&
+                       getAfter(/databases/$(database)/documents/postReports/$(incoming().reportId)).data.postId == incoming().postId;
+      allow update: if isAdmin() &&
+                       isValidId(notifId) &&
+                       incoming().reportId == existing().reportId &&
+                       incoming().reporterId == existing().reporterId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['read']) &&
+                       incoming().read is bool;
+      allow delete: if isAdmin() && isValidId(notifId);
+    }
+  }
+}

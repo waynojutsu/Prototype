@@ -1,0 +1,6 @@
+{
+  "name": "VarsityBW",
+  "description": "Botswana university student chat, study channels, campus feed, marketplace, and events hub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

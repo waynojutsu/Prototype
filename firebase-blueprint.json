@@ -1,0 +1,352 @@
+{
+  "entities": {
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Private student account metadata with verified .ac.bw university email.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID." },
+        "googleEmail": { "type": "string", "description": "Google account email." },
+        "studentEmail": { "type": "string", "description": "Verified Botswana university .ac.bw email." },
+        "verifiedDomain": { "type": "string", "description": "Verified .ac.bw institution domain." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["userId", "googleEmail", "studentEmail", "verifiedDomain", "createdAt", "updatedAt"]
+    },
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Public Botswana student profile without personal PII.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "university": { "type": "string", "enum": ["UB", "BIUST", "BAC", "BOTHO", "BUAN", "OTHER"] },
+        "faculty": { "type": "string" },
+        "yearOfStudy": { "type": "integer" },
+        "bio": { "type": "string" },
+        "verifiedDomain": { "type": "string" },
+        "acBwVerified": { "type": "boolean" },
+        "discoverable": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "university", "faculty", "yearOfStudy", "bio", "verifiedDomain", "acBwVerified", "discoverable", "createdAt", "updatedAt"]
+    },
+    "CampusPost": {
+      "title": "CampusPost",
+      "description": "Campus feed post or announcement.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUniversity": { "type": "string" },
+        "category": { "type": "string", "enum": ["ANNOUNCEMENT", "QUESTION", "CAMPUS_LIFE", "OPPORTUNITY"] },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "likedByUids": { "type": "array" },
+        "commentCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "authorName", "authorUniversity", "category", "title", "body", "visibility", "likedByUids", "commentCount", "createdAt", "updatedAt"]
+    },
+    "PostComment": {
+      "title": "PostComment",
+      "description": "Reply comment on a campus feed post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUniversity": { "type": "string" },
+        "body": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "authorId", "authorName", "authorUniversity", "body", "visibility", "createdAt"]
+    },
+    "StudyGroup": {
+      "title": "StudyGroup",
+      "description": "University course study group post with join requests.",
+      "type": "object",
+      "properties": {
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "creatorUniversity": { "type": "string" },
+        "university": { "type": "string", "enum": ["UB", "BIUST", "BAC", "BOTHO", "BUAN", "OTHER"] },
+        "courseCode": { "type": "string" },
+        "studyTopic": { "type": "string" },
+        "description": { "type": "string" },
+        "meetingSchedule": { "type": "string" },
+        "maxMembers": { "type": "integer" },
+        "memberUids": { "type": "array" },
+        "pendingRequestUids": { "type": "array" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "groupStatus": { "type": "string", "enum": ["open", "full", "closed"] },
+        "linkedChannelId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["creatorId", "creatorName", "creatorUniversity", "university", "courseCode", "studyTopic", "description", "meetingSchedule", "maxMembers", "memberUids", "pendingRequestUids", "visibility", "groupStatus", "linkedChannelId", "createdAt", "updatedAt"]
+    },
+    "StudyJoinRequest": {
+      "title": "StudyJoinRequest",
+      "description": "Request by a student to join a study group.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "groupCreatorId": { "type": "string" },
+        "requesterId": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "requesterUniversity": { "type": "string" },
+        "requesterFaculty": { "type": "string" },
+        "note": { "type": "string" },
+        "requestStatus": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "groupCreatorId", "requesterId", "requesterName", "requesterUniversity", "requesterFaculty", "note", "requestStatus", "createdAt", "updatedAt"]
+    },
+    "ChatChannel": {
+      "title": "ChatChannel",
+      "description": "Campus lounge, study group chat, or 1-on-1 direct message channel.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "university": { "type": "string" },
+        "courseCode": { "type": "string" },
+        "channelType": { "type": "string", "enum": ["CAMPUS_LOUNGE", "STUDY_GROUP", "DIRECT"] },
+        "visibility": { "type": "string", "enum": ["public", "direct"] },
+        "creatorId": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "lastMessageText": { "type": "string" },
+        "lastMessageSender": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "university", "courseCode", "channelType", "visibility", "creatorId", "memberUids", "lastMessageText", "lastMessageSender", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual message inside a chat channel with denormalized visibility and members.",
+      "type": "object",
+      "properties": {
+        "channelId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderUniversity": { "type": "string" },
+        "text": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["public", "direct"] },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["channelId", "senderId", "senderName", "senderUniversity", "text", "visibility", "memberUids", "createdAt"]
+    },
+    "MarketListing": {
+      "title": "MarketListing",
+      "description": "Student marketplace item priced in Botswana Pula (BWP).",
+      "type": "object",
+      "properties": {
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "sellerUniversity": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["TEXTBOOKS", "TECH", "HOUSING", "SERVICES"] },
+        "priceBwp": { "type": "integer" },
+        "condition": { "type": "string", "enum": ["NEW", "LIKE_NEW", "GOOD", "FAIR"] },
+        "pickupSpot": { "type": "string" },
+        "listingStatus": { "type": "string", "enum": ["available", "sold"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sellerId", "sellerName", "sellerUniversity", "title", "description", "category", "priceBwp", "condition", "pickupSpot", "listingStatus", "createdAt", "updatedAt"]
+    },
+    "CampusEvent": {
+      "title": "CampusEvent",
+      "description": "Botswana campus event or student club meetup with RSVP tracking.",
+      "type": "object",
+      "properties": {
+        "organizerId": { "type": "string" },
+        "organizerName": { "type": "string" },
+        "university": { "type": "string", "enum": ["UB", "BIUST", "BAC", "BOTHO", "BUAN", "OTHER"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "venue": { "type": "string" },
+        "eventDateLabel": { "type": "string" },
+        "eventDateIso": { "type": "string" },
+        "category": { "type": "string", "enum": ["ACADEMIC", "CLUBS", "SPORTS", "SOCIAL"] },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "attendeeUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["organizerId", "organizerName", "university", "title", "description", "venue", "eventDateLabel", "category", "visibility", "attendeeUids", "createdAt", "updatedAt"]
+    },
+    "UserPresence": {
+      "title": "UserPresence",
+      "description": "Real-time student chat presence status (online, away, offline) and last active heartbeat.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "status": { "type": "string", "enum": ["online", "away", "offline"] },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "lastActiveAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "status", "visibility", "lastActiveAt", "updatedAt"]
+    },
+    "FcmDeviceToken": {
+      "title": "FcmDeviceToken",
+      "description": "Private Android FCM registration token for push notifications.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "token": { "type": "string" },
+        "platform": { "type": "string", "enum": ["android"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "token", "platform", "updatedAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "Real-time notification alert for new chat messages and feed post replies.",
+      "type": "object",
+      "properties": {
+        "recipientId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderUniversity": { "type": "string" },
+        "notifType": { "type": "string", "enum": ["CHAT_MESSAGE", "POST_REPLY"] },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "targetId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recipientId", "senderId", "senderName", "senderUniversity", "notifType", "title", "body", "targetId", "read", "createdAt"]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Server-provisioned administrator role marker for moderation access.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin"] },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role"]
+    },
+    "PostReport": {
+      "title": "PostReport",
+      "description": "User-submitted moderation report flagging an inappropriate campus feed post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "postAuthorId": { "type": "string" },
+        "postAuthorName": { "type": "string" },
+        "postTitle": { "type": "string" },
+        "postExcerpt": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reporterUniversity": { "type": "string", "enum": ["UB", "BIUST", "BAC", "BOTHO", "BUAN", "OTHER"] },
+        "reason": { "type": "string", "enum": ["SPAM", "HARASSMENT", "HATE_SPEECH", "MISINFORMATION", "INAPPROPRIATE_CONTENT", "ACADEMIC_DISHONESTY"] },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "dismissed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "postAuthorId", "postAuthorName", "postTitle", "postExcerpt", "reporterId", "reporterName", "reporterUniversity", "reason", "details", "status", "createdAt", "updatedAt"]
+    },
+    "AdminNotification": {
+      "title": "AdminNotification",
+      "description": "Moderation alert sent to VarsityBW administrators when a feed post is reported.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string" },
+        "postId": { "type": "string" },
+        "postAuthorId": { "type": "string" },
+        "postTitle": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reporterUniversity": { "type": "string", "enum": ["UB", "BIUST", "BAC", "BOTHO", "BUAN", "OTHER"] },
+        "reason": { "type": "string", "enum": ["SPAM", "HARASSMENT", "HATE_SPEECH", "MISINFORMATION", "INAPPROPRIATE_CONTENT", "ACADEMIC_DISHONESTY"] },
+        "details": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reportId", "postId", "postAuthorId", "postTitle", "reporterId", "reporterName", "reporterUniversity", "reason", "details", "title", "body", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserPrivate",
+      "description": "Private student account verification record."
+    },
+    "/studentProfiles/{userId}": {
+      "schema": "StudentProfile",
+      "description": "Public campus student directory profile."
+    },
+    "/posts/{postId}": {
+      "schema": "CampusPost",
+      "description": "Campus feed posts and announcements."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "PostComment",
+      "description": "Comments on a campus feed post."
+    },
+    "/studyGroups/{groupId}": {
+      "schema": "StudyGroup",
+      "description": "Course and topic study group posts."
+    },
+    "/studyGroups/{groupId}/joinRequests/{requesterUid}": {
+      "schema": "StudyJoinRequest",
+      "description": "Student requests to join a study group."
+    },
+    "/channels/{channelId}": {
+      "schema": "ChatChannel",
+      "description": "Campus chat lounges, study group chats, and DMs."
+    },
+    "/channels/{channelId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Real-time messages inside a channel."
+    },
+    "/listings/{listingId}": {
+      "schema": "MarketListing",
+      "description": "Student marketplace listings in BWP."
+    },
+    "/events/{eventId}": {
+      "schema": "CampusEvent",
+      "description": "Campus events and club meetups."
+    },
+    "/userPresence/{userId}": {
+      "schema": "UserPresence",
+      "description": "Real-time chat presence status for each verified student."
+    },
+    "/users/{userId}/fcmTokens/{tokenId}": {
+      "schema": "FcmDeviceToken",
+      "description": "Private FCM device tokens for push notification delivery."
+    },
+    "/users/{userId}/notifications/{notifId}": {
+      "schema": "UserNotification",
+      "description": "User inbox notifications for chat messages and post replies."
+    },
+    "/admins/{userId}": {
+      "schema": "AdminRole",
+      "description": "Server-managed administrator role documents."
+    },
+    "/postReports/{reportId}": {
+      "schema": "PostReport",
+      "description": "User-submitted reports flagging inappropriate feed posts."
+    },
+    "/adminNotifications/{notifId}": {
+      "schema": "AdminNotification",
+      "description": "Administrator moderation notifications triggered by post reports."
+    }
+  }
+}
